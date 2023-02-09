@@ -82,7 +82,7 @@ struct Client_data {
 struct Server_Data {
     char Id[7];
     char mac_addres[11];
-    char* Server;
+    char *Server;
     int Server_UDP;
     int Server_TCP;
     int newServer_UDP;
@@ -107,8 +107,6 @@ struct TCP_PDU {
     char Data[150];
     //char Info[80];
 };
-
-
 
 
 // FUNTION MAIN
@@ -143,24 +141,47 @@ void readCfg() {
     char delim[] = " \n";
     char *token;
 
-    while (fgets(line,sizeof(line),fd)) {
-        token = strtok;
+        while (fgets(line, sizeof(line), fd)) {
+            token = strtok(line, delim);
+            if (token == NULL) {
+                continue;
+            }
 
-        switch (line[0]) {
-            case 'Id':
+            if (strcmp(token, "Id") == 0) {
                 token = strtok(NULL, delim);
-                strcpy(clientData.Id,token);
-            case 'MAC':
+                if (token == NULL) {
+                    continue;
+                }
+
+                strncpy(clientData.Id, token, sizeof(clientData.Id)-1);
+                clientData.Id[MAX_LINE_LENGTH-1] = '\0';
+                printf("Id = %s\n", clientData.Id);
+
+            } else if (strcmp(token, "MAC") == 0) {
                 token = strtok(NULL, delim);
-                strcpy(clientData.mac_address,token);
-            case 'NMS-Id':
+                if (token == NULL) {
+                    continue;
+                }
+                strncpy(clientData.mac_address, token, sizeof(clientData.mac_address));
+                clientData.mac_address[MAX_LINE_LENGTH-1] = '\0';
+                printf("Mac=%s\n", clientData.mac_address);
+
+            } else if (strcmp(token, "NMS-Id") == 0) {
                 token = strtok(NULL, delim);
+                if (token == NULL) {
+                    continue;
+                }
+                //strncpy(serverData.Server, token, sizeof(serverData.Server)-1);
+                //serverData.Server[MAX_LINE_LENGTH-1] = '\0';
                 serverData.Server = malloc(strlen(token) + 1);
                 strcpy(serverData.Server,token);
-            case 'NMS-UDP':
-                serverData.Server_UDP = atoi(strtok(NULL, delim));
+                printf("localhost=%s\n", serverData.Server);
+
+            } else if (strcmp(token, "NMS-UDP-port") == 0) {
+                serverData.Server_UDP = atoi(strtok(NULL,delim));
+                printf("UDP-PORt=%i\n",serverData.Server_UDP);
+            }
         }
-    }
 }
 
 
