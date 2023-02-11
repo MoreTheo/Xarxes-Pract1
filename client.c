@@ -64,6 +64,13 @@ char* trimLine(char *buffer);
 void parse_argv(int argc, char* argv[]);
 bool checkFileName(char filename[]);
 
+// fuctions declarations register
+
+void open_UDP_socket();
+void config_direcction_struct_server_UDP();
+
+void login();
+
 // global variables
 
 bool debugMode = false;
@@ -73,6 +80,12 @@ char clientCfgFile[] = "client.cfg";
 Client clientData;
 Server serverData;
 
+int udp_socket = -1;
+int tcp_socket1 = -1;
+int tcp_socket2 = -1;
+
+struct sockaddr_in clientAddrUDP, clientAddrTCP, serverAddrUDP, serverAddrTCP;
+
 // Client structure
 
 struct Client_data {
@@ -80,6 +93,7 @@ struct Client_data {
     char mac_address[12];
     int ip_server;
     int UDP_port;
+    unsigned char state;
 };
 
 // Server structure
@@ -133,7 +147,6 @@ char* trimLine(char *buffer) {
 
 
 void readCfg() {
-
     FILE* fd = fopen(clientCfgFile, "r");
 
     if (fd == NULL) {
@@ -191,7 +204,6 @@ void readCfg() {
 
 
 void parse_argv(int argc, char* argv[]) {
-    
     for (int i = 1; i < argc; i++) { // argument 0 ==> name of program
         if (strcmp(argv[i], "-c") == 0) {
             if (checkFileName(argv[i+1])) {
@@ -218,3 +230,54 @@ bool checkFileName(char filename[]) {
 }
 
 
+// LOGIN or Register
+
+void open_UDP_socket() {
+    udp_socket = socket(AF_INET, SOCK_DGRAM, 0);
+
+    if (udp_socket < 0) {
+        /*try to error*/
+        perror("Error opening the UDP socket");
+        exit(-1);
+    }
+
+    // configuration client addres with => sockaddr_in
+    memset(&clientAddrUDP,0,sizeof (struct sockaddr_in));
+    clientAddrUDP.sin_family = AF_INET;
+    clientAddrUDP.sin_port = htons(0);
+    clientAddrUDP.sin_addr.s_addr = (INADDR_ANY);
+
+    // bind
+    if (bind(udp_socket,(const struct sockaddr *) &clientAddrUDP, sizeof( struct sockaddr_in)) < 0) {
+        /*try to error*/
+        perror("Error to bind");
+        exit(-1);
+    }
+
+    if (debugMode) {
+        printf("menssage\n");
+    } 
+}
+
+void login() {
+
+    // define signal handler
+
+
+    // open udp socket
+    if (udp_socket < 0) {
+        open_UDP_socket();
+    }
+
+    config_direcction_struct_server_UDP();
+
+    clientData.state = DISCONNECTED;
+}
+
+void config_direcction_struct_server_UDP() {
+    memset(&serverAddrUDP, 0, sizeof(struct sockaddr_in));
+    serverAddrUDP.sin_family = AF_INET;
+    serverAddrUDP.sin_port = htons(serverData.Server_UDP);
+    struct hostent *host = gethostbyname(serverData.Server);
+    serverAddrUDP.sin_addr.s_addr = (((struct in_addr*) host->h_addr_list[0])->s_addr);   
+}
