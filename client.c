@@ -42,7 +42,7 @@
 
 
 
-//global variables
+
 
 
 // Structs
@@ -60,9 +60,14 @@ void storeID(char* line);
 
 char* trimLine(char *buffer);
 
+
+void parse_argv(int argc, char* argv[]);
+bool checkFileName(char filename[]);
+
 // global variables
 
 bool debugMode = false;
+char* network_config_name_file = "boot.cfg";
 
 char clientCfgFile[] = "client.cfg";
 Client clientData;
@@ -175,13 +180,41 @@ void readCfg() {
                 //serverData.Server[MAX_LINE_LENGTH-1] = '\0';
                 serverData.Server = malloc(strlen(token) + 1);
                 strcpy(serverData.Server,token);
-                printf("localhost=%s\n", serverData.Server);
+                printf("localhost = %s\n", serverData.Server);
 
             } else if (strcmp(token, "NMS-UDP-port") == 0) {
                 serverData.Server_UDP = atoi(strtok(NULL,delim));
-                printf("UDP-PORt=%i\n",serverData.Server_UDP);
+                printf("UDP-PORt = %i\n",serverData.Server_UDP);
             }
         }
+}
+
+
+void parse_argv(int argc, char* argv[]) {
+    
+    for (int i = 1; i < argc; i++) { // argument 0 ==> name of program
+        if (strcmp(argv[i], "-c") == 0) {
+            if (checkFileName(argv[i+1])) {
+                strcpy(clientCfgFile, argv[i+1]);
+            } else {
+                /*mensage de error*/
+                exit(-1);
+            }
+        } else if (strcmp(argv[i], "-d") == 0) {
+            debugMode = true;
+            /*mensage of debugMode is on*/
+        } else if (strcmp(argv[i], "-f") == 0 && argc > (i + 1)) {
+            network_config_name_file = malloc(sizeof(argv[i + 1]));
+            strcpy(network_config_name_file, argv[i + 1]);
+        }
+    }
+}
+
+bool checkFileName(char filename[]) {
+    char* extension = strchr(filename,'.');
+    if (extension == NULL) return false;
+    if (strcmp(extension,".cfg") != 0) return false;
+    return true;
 }
 
 
