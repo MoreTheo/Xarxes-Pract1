@@ -15,15 +15,18 @@
 
 
 // Constants
-
 #define MAX_LINE_LENGTH 255
-
-
-
-
+#define T 1
+#define P 2
+#define Q 3
+#define U 2
+#define N 6
+#define O 2
+#define R 2
+#define S 3
+#define W 3
 
 // Register packet types definitions
-
 #define REGISTER_REQ 0x00
 #define REGISTER_ACK 0x02
 #define REGISTER_NACK 0x04
@@ -31,7 +34,6 @@
 #define ERROR 0x0F
 
 // Estates of client
-
 #define DISCONNECTED 0xA0
 #define WAIT_REG_RESPONSE 0xA2
 #define WAIT_DB_CHECK 0xA4
@@ -39,8 +41,25 @@
 #define SEND_ALIVE 0xA8
 
 // periodical communications packet types
+#define ALIVE_INF 0x10
+#define ALIVE_ACK 0x12
+#define ALIVE_NACK 0x14
+#define ALIVE_REJ 0x16
 
+#define SEND_FILE 0x20
+#define SEND_DATA 0x22
+#define SEND_ACK 0x24
+#define SEND_NACK 0x26
+#define SEND_REJ 0x28
+#define SEND_END 0x2A
 
+// send to server packet
+#define GET_FILE 0x30
+#define GET_DATA 0x32 
+#define GET_ACK 0x34  
+#define GET_NACK 0x36
+#define GET_REJ 0x38
+#define GET_END 0x3A
 
 
 
@@ -51,6 +70,8 @@ typedef struct Client_data Client;
 typedef struct Server_Data Server;
 typedef struct UDP_PDU UDP;
 typedef struct TCP_PDU TCP;
+
+UDP buildREGISTER_REQ();
 
 
 // functions declarations
@@ -64,10 +85,14 @@ char* trimLine(char *buffer);
 void parse_argv(int argc, char* argv[]);
 bool checkFileName(char filename[]);
 
+void changes_client_state(char *state);
+void show_msg(char *msg); 
+
 // fuctions declarations register
 
 void open_UDP_socket();
 void config_direcction_struct_server_UDP();
+void receive_register_packet_udp();
 
 void login();
 
@@ -83,6 +108,10 @@ Server serverData;
 int udp_socket = -1;
 int tcp_socket1 = -1;
 int tcp_socket2 = -1;
+
+char *client_state = NULL;
+
+bool resetCommunication = false;
 
 struct sockaddr_in clientAddrUDP, clientAddrTCP, serverAddrUDP, serverAddrTCP;
 
@@ -133,6 +162,7 @@ struct TCP_PDU {
 int main(int argc, char* argv[]) {
 
     readCfg();
+    login();
     return 0;
 }
 
@@ -262,8 +292,6 @@ void open_UDP_socket() {
 void login() {
 
     // define signal handler
-
-
     // open udp socket
     if (udp_socket < 0) {
         open_UDP_socket();
@@ -272,6 +300,49 @@ void login() {
     config_direcction_struct_server_UDP();
 
     clientData.state = DISCONNECTED;
+    changes_client_state("DISCONNECTED");
+    /*messsage*/
+
+    UDP register_req_packet = buildREGISTER_REQ();
+    
+
+    int sendto_ = sendto(udp_socket, &register_req_packet,sizeof(UDP),0,(struct sockaddr *) &serverAddrUDP, (socklen_t) sizeof(serverAddrUDP));
+    if (sendto_ < 0) {
+        /*message error*/
+        perror("Error in send the UDP");
+        exit(-1);
+    }
+
+    //cahnges status of client
+    clientData.state = WAIT_REG_RESPONSE;
+    changes_client_state("WAIT_REG_RESPONSE");
+
+    struct timeval timeout;
+    int acc;
+    fd_set read_fds;
+
+    for (int sign_ups = 0; sign_ups < O; sign_ups++) {
+        acc = 0;
+        /*debug mode*/
+
+        for (int packets_For_Signup = 0; packets_For_Signup < N; packets_For_Signup++) {
+            timeout.tv_sec = T;
+            timeout.tv_usec = 0;
+            if(packets_For_Signup > P && Q * T > acc) {
+                acc = acc + T;
+                timeout.tv_sec += acc;
+            }
+
+            FD_ZERO(&read_fds);
+            FD_SET(udp_socket, &read_fds);
+            if(select(udp_socket + 1, &read_fds, NULL, NULL, &timeout) > 0) {
+                receive_register_packet_udp();
+                if (!resetCommunication) {
+                    return;
+                }
+            }
+        }
+    }
 }
 
 void config_direcction_struct_server_UDP() {
@@ -281,3 +352,51 @@ void config_direcction_struct_server_UDP() {
     struct hostent *host = gethostbyname(serverData.Server);
     serverAddrUDP.sin_addr.s_addr = (((struct in_addr*) host->h_addr_list[0])->s_addr);   
 }
+
+
+/*BUILD DE PACKET*/
+
+UDP buildREGISTER_REQ() {
+    UDP packet;
+    packet.Type = REGISTER_REQ;
+    strcpy(packet.Id_Tans, clientData.Id);
+    strcpy(packet.mac_address, clientData.mac_address);
+    strcpy(packet.rand_num,"000000");
+    strcpy(packet.Data,"");
+    return packet;
+}
+
+void changes_client_state(char *state_now) {
+    client_state = malloc(sizeof(state_now) + 1);
+    strcpy(client_state, state_now);
+    char msg[MAX_LINE_LENGTH];
+    snprintf(msg,sizeof(msg), "MSG. => Client state changed to: %s\n",client_state);
+    show_msg(msg);
+}
+
+void show_msg(char *msg) {
+    time_t current_time;
+    char time_str[100];
+    time(&current_time);
+    strftime(time_str,sizeof(time_str),"%H:%M:%S",localtime(&current_time));
+    printf("%s | %s\n",time_str,msg);
+    fflush(stdout);
+}
+
+void receive_register_packet_udp() {
+    UDP packet;
+    socklen_t serverAddrSize = sizeof(serverAddrUDP);
+    //long size_received_server;
+    
+    if((recvfrom(udp_socket,&packet,sizeof(UDP),MSG_WAITALL,
+                        (struct sockaddr *) &serverAddrUDP, &serverAddrSize)) < 0) {
+        /*message of error*/
+        perror("Error in recive th UDP packet of the server");
+        exit(-1);
+    }
+    /*debug mode*/
+
+    
+}
+
+
