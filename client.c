@@ -93,6 +93,10 @@ void show_msg(char *msg);
 void open_UDP_socket();
 void config_direcction_struct_server_UDP();
 void receive_register_packet_udp();
+void treatment_packet_type(UDP packet);
+
+void treatment_packet_type_error();
+void save_register_packet_ack_data(UDP received_packet);
 
 void login();
 
@@ -134,6 +138,7 @@ struct Server_Data {
     int Server_UDP;
     int Server_TCP;
     int newServer_UDP;
+    char rand_num[7];
 };
 
 
@@ -341,8 +346,62 @@ void login() {
                     return;
                 }
             }
+            /*
+            COMPROBAR PAQUETE
+            ->REGISTER_REJ
+            ->REGISTER_NACK
+            ->REGISTER_ACK
+            */
+            int sendto_ = sendto(udp_socket, &register_req_packet, sizeof(UDP),0,
+                            (struct sockaddr *) &serverAddrUDP, (socklen_t) sizeof(serverAddrUDP));
+            
+            if (sendto_ < 0) {
+                /*message error*/
+                perror("Error to send another packet");
+                exit(-1);
+            }
+
+            /*ddebug mode*/
+
+            if(resetCommunication) {
+                clientData.state = WAIT_REG_RESPONSE;
+                changes_client_state("WAIT_REG_RESPONSE");
+                show_msg("client state changed");
+                resetCommunication = false;
+                config_direcction_struct_server_UDP();
+            }
         }
+        sleep(U);
     }
+    /*message error*/
+    printf("The server can't connect\n");
+    exit(-1);
+}
+
+void treatment_packet_type(UDP packet) {
+    unsigned char packet_type = packet.Type;
+
+    if (packet_type == REGISTER_REQ) {
+        
+    } else if (packet_type == REGISTER_ACK) {
+        clientData.state = REGISTERED;
+        changes_client_state("REGISTERD");
+
+    } else if (packet_type == REGISTER_NACK) {
+        // break
+    } else if (packet_type == REGISTER_REJ) {
+        clientData.state = DISCONNECTED;
+        changes_client_state("DISCONNECTED");
+    } else if (packet_type == ERROR) {
+        treatment_packet_type_error();
+    } else {
+        show_msg("not packet");
+    }
+}
+
+void treatment_packet_type_error() {
+    show_msg("PACKET RECIVED ERROR");
+    exit(-1);
 }
 
 void config_direcction_struct_server_UDP() {
@@ -351,6 +410,19 @@ void config_direcction_struct_server_UDP() {
     serverAddrUDP.sin_port = htons(serverData.Server_UDP);
     struct hostent *host = gethostbyname(serverData.Server);
     serverAddrUDP.sin_addr.s_addr = (((struct in_addr*) host->h_addr_list[0])->s_addr);   
+}
+
+void save_register_packet_ack_data(UDP received_packet) {
+    if (clientData.state != WAIT_REG_RESPONSE) {
+        /*error message*/
+        printf("client status error\n");
+        /*login*/
+        return;
+    }
+    // copy the communication ID
+    strcpy(serverData.Id, received_packet.Id_Tans);
+    strcpy(serverData.rand_num, received_packet.rand_num);
+    
 }
 
 
@@ -396,7 +468,9 @@ void receive_register_packet_udp() {
     }
     /*debug mode*/
 
-    
+    treatment_packet_type(packet);
 }
 
+
+//  PERIODICAL COMMUNICATION PROCES
 
