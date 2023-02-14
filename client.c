@@ -97,6 +97,7 @@ void treatment_packet_type(UDP packet);
 
 void treatment_packet_type_error();
 void save_register_packet_ack_data(UDP received_packet);
+void treatment_packet_ACK(UDP packet);
 
 void login();
 
@@ -138,14 +139,14 @@ struct Server_Data {
     int Server_UDP;
     int Server_TCP;
     int newServer_UDP;
-    char rand_num[7];
+    char rand_num[7]; 
 };
 
 
 // UDP PDU Struct
 struct UDP_PDU {
     unsigned char Type;
-    char Id_Tans[11];
+    char Id_Tans[7];
     char mac_address[13];
     char rand_num[7];
     char Data[50];
@@ -380,22 +381,25 @@ void login() {
 
 void treatment_packet_type(UDP packet) {
     unsigned char packet_type = packet.Type;
-
-    if (packet_type == REGISTER_REQ) {
         
-    } else if (packet_type == REGISTER_ACK) {
+    switch (packet_type)
+    {
+    case REGISTER_ACK:
         clientData.state = REGISTERED;
         changes_client_state("REGISTERD");
-
-    } else if (packet_type == REGISTER_NACK) {
-        // break
-    } else if (packet_type == REGISTER_REJ) {
+        treatment_packet_ACK(packet);
+    case REGISTER_NACK:
+        break;
+    
+    case REGISTER_REJ: 
         clientData.state = DISCONNECTED;
         changes_client_state("DISCONNECTED");
-    } else if (packet_type == ERROR) {
+        exit(-1);
+
+    case ERROR:
         treatment_packet_type_error();
-    } else {
-        show_msg("not packet");
+    default:
+        show_msg("not packet");;
     }
 }
 
@@ -422,7 +426,7 @@ void save_register_packet_ack_data(UDP received_packet) {
     // copy the communication ID
     strcpy(serverData.Id, received_packet.Id_Tans);
     strcpy(serverData.rand_num, received_packet.rand_num);
-    
+
 }
 
 
@@ -469,6 +473,14 @@ void receive_register_packet_udp() {
     /*debug mode*/
 
     treatment_packet_type(packet);
+}
+
+void treatment_packet_ACK(UDP packet) {
+    //if (clientData.state != WAI_)
+    strcpy(serverData.rand_num,packet.rand_num);
+    strcpy(serverData.Id,packet.Id_Tans);
+    strcpy(serverData.mac_addres,packet.mac_address);
+    serverData.
 }
 
 
