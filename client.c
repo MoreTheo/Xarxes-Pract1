@@ -167,6 +167,7 @@ struct TCP_PDU {
 
 int main(int argc, char* argv[]) {
 
+    parse_argv(argc,argv);
     readCfg();
     login();
     return 0;
@@ -195,47 +196,50 @@ void readCfg() {
     char delim[] = " \n";
     char *token;
 
-        while (fgets(line, sizeof(line), fd)) {
-            token = strtok(line, delim);
+    while (fgets(line, sizeof(line), fd)) {
+        token = strtok(line, delim);
+        if (token == NULL) {
+            continue;
+        }
+
+        if (strcmp(token, "Id") == 0) {
+            token = strtok(NULL, delim);
             if (token == NULL) {
                 continue;
             }
 
-            if (strcmp(token, "Id") == 0) {
-                token = strtok(NULL, delim);
-                if (token == NULL) {
-                    continue;
-                }
+            strncpy(clientData.Id, token, sizeof(clientData.Id)-1);
+            clientData.Id[MAX_LINE_LENGTH-1] = '\0';
+            //printf("Id = %s\n", clientData.Id);
 
-                strncpy(clientData.Id, token, sizeof(clientData.Id)-1);
-                clientData.Id[MAX_LINE_LENGTH-1] = '\0';
-                printf("Id = %s\n", clientData.Id);
-
-            } else if (strcmp(token, "MAC") == 0) {
-                token = strtok(NULL, delim);
-                if (token == NULL) {
-                    continue;
-                }
-                strncpy(clientData.mac_address, token, sizeof(clientData.mac_address));
-                clientData.mac_address[MAX_LINE_LENGTH-1] = '\0';
-                printf("Mac=%s\n", clientData.mac_address);
-
-            } else if (strcmp(token, "NMS-Id") == 0) {
-                token = strtok(NULL, delim);
-                if (token == NULL) {
-                    continue;
-                }
-                //strncpy(serverData.Server, token, sizeof(serverData.Server)-1);
-                //serverData.Server[MAX_LINE_LENGTH-1] = '\0';
-                serverData.Server = malloc(strlen(token) + 1);
-                strcpy(serverData.Server,token);
-                printf("localhost = %s\n", serverData.Server);
-
-            } else if (strcmp(token, "NMS-UDP-port") == 0) {
-                serverData.Server_UDP = atoi(strtok(NULL,delim));
-                printf("UDP-PORt = %i\n",serverData.Server_UDP);
+        } else if (strcmp(token, "MAC") == 0) {
+            token = strtok(NULL, delim);
+            if (token == NULL) {
+                continue;
             }
+            strncpy(clientData.mac_address, token, sizeof(clientData.mac_address));
+            clientData.mac_address[MAX_LINE_LENGTH-1] = '\0';
+            //printf("Mac=%s\n", clientData.mac_address);
+
+        } else if (strcmp(token, "NMS-Id") == 0) {
+            token = strtok(NULL, delim);
+            if (token == NULL) {
+                continue;
+            }
+            //strncpy(serverData.Server, token, sizeof(serverData.Server)-1);
+            //serverData.Server[MAX_LINE_LENGTH-1] = '\0';
+            serverData.Server = malloc(strlen(token) + 1);
+            strcpy(serverData.Server,token);
+            //printf("localhost = %s\n", serverData.Server);
+
+        } else if (strcmp(token, "NMS-UDP-port") == 0) {
+            serverData.Server_UDP = atoi(strtok(NULL,delim));
+            //printf("UDP-PORt = %i\n",serverData.Server_UDP);
         }
+    }
+    if (debugMode) {
+        printf("Okay to read file cfg\n");
+    }
 }
 
 
@@ -250,11 +254,17 @@ void parse_argv(int argc, char* argv[]) {
             }
         } else if (strcmp(argv[i], "-d") == 0) {
             debugMode = true;
+            if(debugMode) {
+                printf("DEBUG MODE IS ON\n");
+            }
             /*mensage of debugMode is on*/
         } else if (strcmp(argv[i], "-f") == 0 && argc > (i + 1)) {
             network_config_name_file = malloc(sizeof(argv[i + 1]));
             strcpy(network_config_name_file, argv[i + 1]);
         }
+    }
+    if (debugMode) {
+        printf("OK in checkParams\n");
     }
 }
 
@@ -291,7 +301,7 @@ void open_UDP_socket() {
     }
 
     if (debugMode) {
-        printf("menssage\n");
+        printf("OKAY OPEN UDP SOCKET\n");
     } 
 }
 
@@ -319,6 +329,10 @@ void login() {
         exit(-1);
     }
 
+    if(debugMode) {
+        printf("First reg_req\n");
+    }
+
     //cahnges status of client
     clientData.state = WAIT_REG_RESPONSE;
     changes_client_state("WAIT_REG_RESPONSE");
@@ -334,9 +348,11 @@ void login() {
         for (int packets_For_Signup = 0; packets_For_Signup < N; packets_For_Signup++) {
             timeout.tv_sec = T;
             timeout.tv_usec = 0;
-            if(packets_For_Signup > P && Q * T > acc) {
+            if(packets_For_Signup >= P && packets_For_Signup < Q) {
                 acc = acc + T;
                 timeout.tv_sec += acc;
+            } else if (packets_For_Signup >= Q) {
+                timeout.tv_sec = Q * T;
             }
 
             FD_ZERO(&read_fds);
@@ -361,6 +377,8 @@ void login() {
                 perror("Error to send another packet");
                 exit(-1);
             }
+            clientData.state = WAIT_REG_RESPONSE;
+            changes_client_state("WAIT_REG_RESPONSE");
 
             /*ddebug mode*/
 
@@ -371,6 +389,7 @@ void login() {
                 resetCommunication = false;
                 config_direcction_struct_server_UDP();
             }
+            sleep(T);
         }
         sleep(U);
     }
@@ -471,6 +490,9 @@ void receive_register_packet_udp() {
         exit(-1);
     }
     /*debug mode*/
+    if(debugMode) {
+        printf("Okay in recived the packet of server\n");
+    }
 
     treatment_packet_type(packet);
 }
@@ -480,9 +502,16 @@ void treatment_packet_ACK(UDP packet) {
     strcpy(serverData.rand_num,packet.rand_num);
     strcpy(serverData.Id,packet.Id_Tans);
     strcpy(serverData.mac_addres,packet.mac_address);
-    serverData.
+    char serverIP[MAX_LINE_LENGTH];
+    strcpy(serverIP,inet_ntoa(serverAddrUDP.sin_addr));
+    strcpy(serverData.Server, serverIP);
 }
 
+/*
+int compute_time(int packets_For_Signup) {
+    
+} 
+*/
 
 //  PERIODICAL COMMUNICATION PROCES
 
