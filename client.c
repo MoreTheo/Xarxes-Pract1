@@ -123,8 +123,8 @@ struct sockaddr_in clientAddrUDP, clientAddrTCP, serverAddrUDP, serverAddrTCP;
 // Client structure
 
 struct Client_data {
-    char Id[6];
-    char mac_address[12];
+    char Id[7];
+    char mac_address[13];
     int ip_server;
     int UDP_port;
     unsigned char state;
@@ -140,6 +140,7 @@ struct Server_Data {
     int Server_TCP;
     int newServer_UDP;
     char rand_num[7]; 
+    char Data[50];
 };
 
 
@@ -192,49 +193,38 @@ void readCfg() {
         exit(-1);
     }
 
-    char line[MAX_LINE_LENGTH];
+    char line[70];
     char delim[] = " \n";
     char *token;
 
-    while (fgets(line, sizeof(line), fd)) {
+    while (fgets(line,70, fd)) {
         token = strtok(line, delim);
-        if (token == NULL) {
-            continue;
-        }
 
         if (strcmp(token, "Id") == 0) {
             token = strtok(NULL, delim);
-            if (token == NULL) {
-                continue;
-            }
 
-            strncpy(clientData.Id, token, sizeof(clientData.Id)-1);
-            clientData.Id[MAX_LINE_LENGTH-1] = '\0';
-            //printf("Id = %s\n", clientData.Id);
+            //strncpy(clientData.Id, token, sizeof(clientData.Id)-1);
+            strcpy(clientData.Id,token);
+            //clientData.Id[MAX_LINE_LENGTH-1] = '\0';
+            printf("Id = %s\n", clientData.Id);
 
         } else if (strcmp(token, "MAC") == 0) {
             token = strtok(NULL, delim);
-            if (token == NULL) {
-                continue;
-            }
-            strncpy(clientData.mac_address, token, sizeof(clientData.mac_address));
-            clientData.mac_address[MAX_LINE_LENGTH-1] = '\0';
-            //printf("Mac=%s\n", clientData.mac_address);
+            strcpy(clientData.mac_address,token);
+            //clientData.mac_address[MAX_LINE_LENGTH-1] = '\0';
+            printf("Mac=%s\n", clientData.mac_address);
 
         } else if (strcmp(token, "NMS-Id") == 0) {
             token = strtok(NULL, delim);
-            if (token == NULL) {
-                continue;
-            }
             //strncpy(serverData.Server, token, sizeof(serverData.Server)-1);
             //serverData.Server[MAX_LINE_LENGTH-1] = '\0';
             serverData.Server = malloc(strlen(token) + 1);
             strcpy(serverData.Server,token);
-            //printf("localhost = %s\n", serverData.Server);
+            printf("localhost = %s\n", serverData.Server);
 
         } else if (strcmp(token, "NMS-UDP-port") == 0) {
             serverData.Server_UDP = atoi(strtok(NULL,delim));
-            //printf("UDP-PORt = %i\n",serverData.Server_UDP);
+            printf("UDP-PORt = %i\n",serverData.Server_UDP);
         }
     }
     if (debugMode) {
@@ -291,7 +281,7 @@ void open_UDP_socket() {
     memset(&clientAddrUDP,0,sizeof (struct sockaddr_in));
     clientAddrUDP.sin_family = AF_INET;
     clientAddrUDP.sin_port = htons(0);
-    clientAddrUDP.sin_addr.s_addr = (INADDR_ANY);
+    clientAddrUDP.sin_addr.s_addr = htonl(INADDR_ANY);
 
     // bind
     if (bind(udp_socket,(const struct sockaddr *) &clientAddrUDP, sizeof( struct sockaddr_in)) < 0) {
@@ -322,7 +312,7 @@ void login() {
     UDP register_req_packet = buildREGISTER_REQ();
     
 
-    int sendto_ = sendto(udp_socket, &register_req_packet,sizeof(UDP),0,(struct sockaddr *) &serverAddrUDP, (socklen_t) sizeof(serverAddrUDP));
+    int sendto_ = sendto(udp_socket, &register_req_packet,sizeof(UDP),0,(struct sockaddr *) &serverAddrUDP,sizeof(serverAddrUDP));
     if (sendto_ < 0) {
         /*message error*/
         perror("Error in send the UDP");
@@ -348,7 +338,7 @@ void login() {
         for (int packets_For_Signup = 0; packets_For_Signup < N; packets_For_Signup++) {
             timeout.tv_sec = T;
             timeout.tv_usec = 0;
-            if(packets_For_Signup >= P && packets_For_Signup < Q) {
+            if(packets_For_Signup > P && packets_For_Signup < Q) {
                 acc = acc + T;
                 timeout.tv_sec += acc;
             } else if (packets_For_Signup >= Q) {
@@ -359,9 +349,11 @@ void login() {
             FD_SET(udp_socket, &read_fds);
             if(select(udp_socket + 1, &read_fds, NULL, NULL, &timeout) > 0) {
                 receive_register_packet_udp();
+                /*
                 if (!resetCommunication) {
                     return;
                 }
+                */
             }
             /*
             COMPROBAR PAQUETE
@@ -370,14 +362,14 @@ void login() {
             ->REGISTER_ACK
             */
             int sendto_ = sendto(udp_socket, &register_req_packet, sizeof(UDP),0,
-                            (struct sockaddr *) &serverAddrUDP, (socklen_t) sizeof(serverAddrUDP));
+                            (struct sockaddr *) &serverAddrUDP,sizeof(serverAddrUDP));
             
             if (sendto_ < 0) {
                 /*message error*/
                 perror("Error to send another packet");
                 exit(-1);
             }
-            clientData.state = WAIT_REG_RESPONSE;
+            //clientData.state = WAIT_REG_RESPONSE;
             changes_client_state("WAIT_REG_RESPONSE");
 
             /*ddebug mode*/
@@ -413,6 +405,9 @@ void treatment_packet_type(UDP packet) {
     case REGISTER_REJ: 
         clientData.state = DISCONNECTED;
         changes_client_state("DISCONNECTED");
+        if(debugMode) {
+            printf("Recived packet REGISTER_REJ\n");
+        }
         exit(-1);
 
     case ERROR:
@@ -432,6 +427,10 @@ void config_direcction_struct_server_UDP() {
     serverAddrUDP.sin_family = AF_INET;
     serverAddrUDP.sin_port = htons(serverData.Server_UDP);
     struct hostent *host = gethostbyname(serverData.Server);
+    if (!host) {
+        printf("ERROR -> can't find server on trying to setup UDP socket\n");
+        exit(-1);
+    }
     serverAddrUDP.sin_addr.s_addr = (((struct in_addr*) host->h_addr_list[0])->s_addr);   
 }
 
@@ -483,15 +482,15 @@ void receive_register_packet_udp() {
     socklen_t serverAddrSize = sizeof(serverAddrUDP);
     //long size_received_server;
     
-    if((recvfrom(udp_socket,&packet,sizeof(UDP),MSG_WAITALL,
-                        (struct sockaddr *) &serverAddrUDP, &serverAddrSize)) < 0) {
+    if((recvfrom(udp_socket,&packet,sizeof(UDP),0,
+                        (struct sockaddr *) &serverAddrUDP,&serverAddrSize)) < 0) {
         /*message of error*/
         perror("Error in recive th UDP packet of the server");
         exit(-1);
     }
     /*debug mode*/
     if(debugMode) {
-        printf("Okay in recived the packet of server\n");
+        printf("Okay in recived the packet of server tipe_packet => %d\n",(unsigned char)packet.Type);
     }
 
     treatment_packet_type(packet);
@@ -505,6 +504,8 @@ void treatment_packet_ACK(UDP packet) {
     char serverIP[MAX_LINE_LENGTH];
     strcpy(serverIP,inet_ntoa(serverAddrUDP.sin_addr));
     strcpy(serverData.Server, serverIP);
+    // comunicatoin periodicat
+    exit(-1);
 }
 
 /*
@@ -512,6 +513,8 @@ int compute_time(int packets_For_Signup) {
     
 } 
 */
+
+
 
 //  PERIODICAL COMMUNICATION PROCES
 
