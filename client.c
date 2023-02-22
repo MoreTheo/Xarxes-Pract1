@@ -98,8 +98,16 @@ void treatment_packet_type(UDP packet);
 void treatment_packet_type_error();
 void save_register_packet_ack_data(UDP received_packet);
 void treatment_packet_ACK(UDP packet);
+void treatment_packet_NACK(UDP packet);
 
 void login();
+
+/*periodical comunicaciotion*/
+
+void open_TCP1_socket();
+void config_direcction_struct_server_TCP();
+void periodical_communication();
+
 
 // global variables
 
@@ -295,6 +303,34 @@ void open_UDP_socket() {
     } 
 }
 
+void open_TCP1_socket() {
+    tcp_socket1 = socket(AF_INET,SOCK_STREAM, 0);
+
+    if (tcp_socket1 < 0) {
+        /*try to error*/
+        perror("Error opening the TCP1 socket");
+        exit(-1);
+    }
+
+    // configuration client addres TCP with => sockaddr_in
+    memset(&clientAddrTCP, 0, sizeof(struct sockaddr_in));
+    clientAddrTCP.sin_family = AF_INET;
+    clientAddrTCP.sin_port = htons(clientData.ip_server);
+    clientAddrTCP.sin_addr.s_addr = (INADDR_ANY); 
+
+    // Bind the socket
+
+    if (bind(tcp_socket1, (const struct sockaddr *)&clientAddrTCP, sizeof (struct sockaddr_in)) < 0) {
+        /*try error*/
+        perror("Errto to bind in tcp1");
+        exit(-1);
+    }
+
+    if (debugMode) {
+        printf("Opening the tcp1\n"); 
+    }
+}
+
 void login() {
 
     // define signal handler
@@ -399,8 +435,10 @@ void treatment_packet_type(UDP packet) {
         clientData.state = REGISTERED;
         changes_client_state("REGISTERD");
         treatment_packet_ACK(packet);
+
     case REGISTER_NACK:
-        break;
+        show_msg("new proces of register");
+        treatment_packet_NACK(packet);
     
     case REGISTER_REJ: 
         clientData.state = DISCONNECTED;
@@ -409,7 +447,6 @@ void treatment_packet_type(UDP packet) {
             printf("Recived packet REGISTER_REJ\n");
         }
         exit(-1);
-
     case ERROR:
         treatment_packet_type_error();
     default:
@@ -434,6 +471,15 @@ void config_direcction_struct_server_UDP() {
     serverAddrUDP.sin_addr.s_addr = (((struct in_addr*) host->h_addr_list[0])->s_addr);   
 }
 
+void config_direcction_struct_server_TCP() {
+    memset(&serverAddrTCP, 0, sizeof(serverAddrTCP));
+    serverAddrTCP.sin_family = AF_INET;
+    serverAddrTCP.sin_port = htons(serverData.Server_TCP);
+    serverAddrTCP.sin_addr.s_addr = inet_addr(serverData.Server); //localhost 
+}
+
+
+
 void save_register_packet_ack_data(UDP received_packet) {
     if (clientData.state != WAIT_REG_RESPONSE) {
         /*error message*/
@@ -444,7 +490,7 @@ void save_register_packet_ack_data(UDP received_packet) {
     // copy the communication ID
     strcpy(serverData.Id, received_packet.Id_Tans);
     strcpy(serverData.rand_num, received_packet.rand_num);
-
+    strcpy(serverData.mac_addres, received_packet.mac_address);
 }
 
 
@@ -458,6 +504,17 @@ UDP buildREGISTER_REQ() {
     strcpy(packet.rand_num,"000000");
     strcpy(packet.Data,"");
     return packet;
+}
+
+UDP buildALIVE_INF() {
+    UDP packet_alive_inf;
+    packet_alive_inf.Type = ALIVE_INF;
+    strcpy(packet_alive_inf.Id_Tans,clientData.Id);
+    strcpy(packet_alive_inf.mac_address,clientData.mac_address);
+    strcpy(packet_alive_inf.rand_num, serverData.rand_num);
+    strcpy(packet_alive_inf.Data, "");
+
+    return packet_alive_inf;
 }
 
 void changes_client_state(char *state_now) {
@@ -508,6 +565,10 @@ void treatment_packet_ACK(UDP packet) {
     exit(-1);
 }
 
+void treatment_packet_NACK(UDP packet) {
+    login();
+}
+
 /*
 int compute_time(int packets_For_Signup) {
     
@@ -517,4 +578,8 @@ int compute_time(int packets_For_Signup) {
 
 
 //  PERIODICAL COMMUNICATION PROCES
+
+void periodical_communication() {
+
+}
 
