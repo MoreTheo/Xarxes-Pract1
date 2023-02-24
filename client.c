@@ -93,12 +93,15 @@ void show_msg(char *msg);
 void open_UDP_socket();
 void config_direcction_struct_server_UDP();
 void receive_register_packet_udp();
+void receive_alive_packet_udp();
 void treatment_packet_type(UDP packet);
+
 
 void treatment_packet_type_error();
 void save_register_packet_ack_data(UDP received_packet);
 void treatment_packet_ACK(UDP packet);
 void treatment_packet_NACK(UDP packet);
+void treatment_packet_ALIVE_ACK(UDP packet_alive_ack);
 
 void login();
 
@@ -107,6 +110,8 @@ void login();
 void open_TCP1_socket();
 void config_direcction_struct_server_TCP();
 void periodical_communication();
+
+bool checkServerData(UDP packet);
 
 
 // global variables
@@ -371,16 +376,17 @@ void login() {
         acc = 0;
         /*debug mode*/
 
+        if (debugMode) {
+            printf("New register process number => %i\n",sign_ups);
+        }
+
         for (int packets_For_Signup = 0; packets_For_Signup < N; packets_For_Signup++) {
             timeout.tv_sec = T;
             timeout.tv_usec = 0;
-            if(packets_For_Signup > P && packets_For_Signup < Q) {
+            if(packets_For_Signup > P && Q * T > acc) {
                 acc = acc + T;
                 timeout.tv_sec += acc;
-            } else if (packets_For_Signup >= Q) {
-                timeout.tv_sec = Q * T;
             }
-
             FD_ZERO(&read_fds);
             FD_SET(udp_socket, &read_fds);
             if(select(udp_socket + 1, &read_fds, NULL, NULL, &timeout) > 0) {
@@ -406,9 +412,12 @@ void login() {
                 exit(-1);
             }
             //clientData.state = WAIT_REG_RESPONSE;
-            changes_client_state("WAIT_REG_RESPONSE");
+            //changes_client_state("WAIT_REG_RESPONSE");
 
-            /*ddebug mode*/
+            /*debug mode*/
+            if(debugMode) {
+                printf("name packet REQ_REQ numero => %i time => %i\n",packets_For_Signup,acc + T);
+            }
 
             if(resetCommunication) {
                 clientData.state = WAIT_REG_RESPONSE;
@@ -447,6 +456,17 @@ void treatment_packet_type(UDP packet) {
             printf("Recived packet REGISTER_REJ\n");
         }
         exit(-1);
+
+    case ALIVE_ACK:
+        //clientData.state = ALIVE
+        //changes_client_state("ALIVE");
+        treatment_packet_ALIVE_ACK(packet);
+    case ALIVE_REJ:
+        clientData.state = DISCONNECTED;
+        changes_client_state("DISCONNECTED");
+        login();
+        /*se tiene que sumar un proceso más*/
+        //exit(-1);
     case ERROR:
         treatment_packet_type_error();
     default:
@@ -562,7 +582,8 @@ void treatment_packet_ACK(UDP packet) {
     strcpy(serverIP,inet_ntoa(serverAddrUDP.sin_addr));
     strcpy(serverData.Server, serverIP);
     // comunicatoin periodicat
-    exit(-1);
+    //exit(-1);
+    periodical_communication();
 }
 
 void treatment_packet_NACK(UDP packet) {
@@ -581,5 +602,73 @@ int compute_time(int packets_For_Signup) {
 
 void periodical_communication() {
 
+    UDP alive_info = buildALIVE_INF();
+    config_direcction_struct_server_UDP();
+
+    // send the first alive packet
+    int sendto_ = sendto(udp_socket, &alive_info, sizeof(UDP), 0, (const struct sockaddr *)&serverAddrUDP, sizeof(serverAddrUDP));
+    if(sendto_ < 0) {
+        /*try error*/
+        perror("Error to send packet alive");
+        exit(-1);
+    }
+
+    if(debugMode) {
+        printf("Send the first packet alive\n");
+    }
+
+    struct timeval t;
+    t.tv_sec = R*S;
+    t.tv_usec = 0;
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(udp_socket, &read_fds);
+    if (select(udp_socket + 1, &read_fds, NULL, NULL, &t)) {
+        receive_alive_packet_udp();
+    }
+    
 }
 
+void receive_alive_packet_udp() {
+    UDP packet;
+    socklen_t serverAddrSize = sizeof(serverAddrUDP);
+    
+    if(recvfrom(udp_socket,&packet, sizeof(UDP), MSG_WAITALL,
+            (struct sockaddr *)&serverAddrUDP, &serverAddrSize) < 0) {
+               /*try error*/
+               perror("Error in receiving the UDP ALIVE packet");
+               exit(-1); 
+            }
+    if (debugMode) {
+        printf("Recived the packet alive\n");
+    }
+    treatment_packet_type(packet);
+}
+
+void treatment_packet_ALIVE_ACK(UDP packet_alive_ack) {
+    
+    if(checkServerData(packet_alive_ack)) {
+        changes_client_state("ALIVE");
+
+        /*creater another packet alive*/
+
+        UDP packet_alive_inf = buildALIVE_INF();
+
+        // se
+    } else {
+        return;
+    }
+}
+
+// check the information recivied of the server
+
+bool checkServerData(UDP packet) {
+    char *receivedServerIP = inet_ntoa(serverAddrUDP.sin_addr);
+    if(strcmp(packet.Id_Tans,serverData.Id) == 0
+        && strcmp(packet.mac_address, serverData.mac_addres) == 0
+        && strcmp(packet.rand_num, serverData.rand_num) == 0
+        && strcmp(serverData.Server, receivedServerIP) == 0) {
+        return true;
+    }
+    return false;
+}
